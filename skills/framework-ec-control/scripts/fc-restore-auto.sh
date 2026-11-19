@@ -26,10 +26,11 @@ for p in $(ss -ltnH 2>/dev/null | awk '$4 ~ /^127\.0\.0\.1:/ {n=split($4,a,":");
     fi
 done
 
-mode=""; state=""
+mode=""; state=""; cfg=""
 state="$(systemctl is-active framework-control 2>/dev/null || true)"
 if [ -n "$port" ]; then
-    mode="$(curl -s -m 3 "http://127.0.0.1:${port}/api/config" | python3 -c '
+    cfg="$(curl -s -m 3 "http://127.0.0.1:${port}/api/config")"
+    mode="$(printf '%s' "$cfg" | python3 -c '
 import json,sys
 c=json.load(sys.stdin); fan=c.get("fan") or {}
 a=fan.get("active_profile")

@@ -15,11 +15,19 @@ portable, so these also load in Claude Code, Codex-style agents and anything els
 ```bash
 # whole repo as a skill source (search + install by name)
 hermes skills tap add wildaces215/hermes-skills
-hermes skills install wildaces215/hermes-skills/framework-ec-control
+hermes skills install wildaces215/hermes-skills/framework-ec-control --force
 
 # or straight from the folder name
-hermes skills install wildaces215/hermes-skills/framework-ec-control --category devops
+hermes skills install wildaces215/hermes-skills/framework-ec-control --category devops --force
 ```
+
+**Why `--force`:** Hermes scans every hub install. `framework-ec-control` scans as **caution**, not
+`dangerous` — the only high-severity findings are four `sudo` invocations inside `scripts/`, which is
+exactly what the skill is for (the EC is root-only). Community-source skills at caution need `--force`;
+`--force` cannot override a `dangerous` verdict, so if you see one, the content changed.
+
+If you would rather not force-install: copy `skills/framework-ec-control/` into
+`~/.hermes/skills/devops/` yourself and read it first — same files, no scanner.
 
 Not using Hermes? Copy the skill directory into your agent's skills folder — the only required file is
 `SKILL.md`; `references/` and `scripts/` sit next to it.

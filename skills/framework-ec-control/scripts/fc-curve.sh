@@ -8,7 +8,7 @@
 #   ./fc-curve.sh ... --dry-run        # print the JSON patch, change nothing
 #
 # Merges the profile into the existing profile list (profiles are replaced wholesale by the API)
-# and activates it. Never touches manual duty unless --mode manual is passed.
+# and activates it. Never touches manual duty; it only adds/activates a curve profile.
 set -euo pipefail
 
 id=""; name=""; points="35:20,50:30,65:55,80:85,90:100"
@@ -46,9 +46,12 @@ FC_ID="$id" FC_NAME="$name" FC_POINTS="$points" FC_HYST="$hyst" FC_UP="$up" FC_D
 FC_POLL="$poll" FC_PORT="$port" FC_DRY="$dry" python3 - <<'PY'
 import json, os, sys, time, urllib.request
 
-port = os.environ["FC_PORT"]
-base = f"http://127.0.0.1:{port}"
-dry = os.environ["FC_DRY"] == "1"
+def env(name, default=""):
+    value = os.environ.get(name)
+    return default if value in (None, "") else value
+
+base = "http://127.0.0.1:" + env("FC_PORT")
+dry = env("FC_DRY", "0") == "1"
 
 def get(path):
     with urllib.request.urlopen(base + path, timeout=5) as r:
@@ -61,7 +64,7 @@ def post(path, payload):
         return json.load(r)
 
 points = []
-for pair in os.environ["FC_POINTS"].split(","):
+for pair in env("FC_POINTS").split(","):
     pair = pair.strip()
     if not pair:
         continue
@@ -74,17 +77,21 @@ if any(points[i][0] >= points[i + 1][0] for i in range(len(points) - 1)):
 if any(not 0 <= d <= 100 for _, d in points):
     sys.exit("duty must be 0-100")
 
-curve = {
-    "sensors": [],
-    "points": points,
-    "hysteresis_c": int(os.environ["FC_HYST"]),
-    "rate_limit_pct_per_step": int(os.environ["FC_UP"]),
-    "poll_ms": int(os.environ["FC_POLL"]),
-}
-if os.environ["FC_DOWN"].strip():
-    curve["rate_limit_down_pct_per_step"] = int(os.environ["FC_DOWN"])
+try:
+    curve = {
+        "sensors": [],
+        "points": points,
+        "hysteresis_c": int(env("FC_HYST", "3")),
+        "rate_limit_pct_per_step": int(env("FC_UP", "5")),
+        "poll_ms": int(env("FC_POLL", "500")),
+    }
+except ValueError:
+    sys.exit("--hysteresis/--up/--poll must be integers")
 
-profile = {"id": os.environ["FC_ID"], "name": os.environ["FC_NAME"],
+if env("FC_DOWN").strip():
+    curve["rate_limit_down_pct_per_step"] = int(env("FC_DOWN"))
+
+profile = {"id": env("FC_ID"), "name": env("FC_NAME"),
            "mode": "curve", "curve": curve, "overrides": []}
 
 cfg = get("/api/config")
@@ -99,18 +106,18 @@ if dry:
     sys.exit(0)
 
 before = get("/api/thermal")
-print(f"before: {before.get('fans')} {before.get('temps')}")
+print("before: fans={} temps={}".format(before.get("fans"), before.get("temps")))
 post("/api/config?client_id=fc-curve-script", patch)
 
 back = get("/api/config")
-active = ((back.get("fan") or {}).get("active_profile"))
+active = (back.get("fan") or {}).get("active_profile")
 ok = active == profile["id"]
-print(f"active_profile now: {active}  ({'ok' if ok else 'MISMATCH — check profiles payload'})")
+print("active_profile now: {}  ({})".format(active, "ok" if ok else "MISMATCH - check profiles payload"))
 
-# Curve is evaluated on the next poll; give it a couple of intervals plus rate-limit steps.
-time.sleep(max(2, int(os.environ["FC_POLL"]) / 1000 * 3))
+# The curve is evaluated on the next poll; allow a few intervals plus rate-limit steps.
+time.sleep(max(2.0, int(env("FC_POLL", "500")) / 1000 * 3))
 after = get("/api/thermal")
-print(f"after:  {after.get('fans')} {after.get('temps')}")
+print("after:  fans={} temps={}".format(after.get("fans"), after.get("temps")))
 print("RPM must move within ~1-3 s per rate-limit step; duty is the instruction, RPM is the evidence.")
 sys.exit(0 if ok else 3)
 PY

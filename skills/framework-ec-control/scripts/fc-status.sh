@@ -29,10 +29,14 @@ echo "port:   ${port:-NOT FOUND (no loopback listener answered /api/health)}"
 echo
 
 if [ -n "$port" ]; then
-    FC_PORT="$port" python3 - <<'PY'
+    FC_PORT="$port" FC_UNIT_STATE="$(systemctl is-active framework-control 2>/dev/null || true)" python3 - <<'PY'
 import json, os, urllib.request
 
-base = "http://127.0.0.1:" + os.environ["FC_PORT"]
+def env(name, default=""):
+    value = os.environ.get(name)
+    return default if value in (None, "") else value
+
+base = "http://127.0.0.1:" + env("FC_PORT")
 
 def get(path):
     try:
@@ -101,7 +105,7 @@ else:
     print("  unavailable")
 
 if mode == "manual":
-    active_unit = os.popen("systemctl is-active framework-control 2>/dev/null").read().strip()
+    active_unit = env("FC_UNIT_STATE")
     print()
     if active_unit != "active":
         print("!! WARNING: manual duty is configured and the daemon is NOT active.")
