@@ -31,7 +31,7 @@ answer requires a *write*.
    daemon never calls `--autofanctrl` on shutdown. Manual mode + stopped daemon = fan pinned at that
    duty at any temperature.
    Always close a manual session with `sudo framework_tool --autofanctrl`, or leave the daemon in a
-   Curve/Disabled profile. `scripts/fc-restore-auto.sh` does it in the right order.
+   Curve/Disabled profile. `bash scripts/fc-restore-auto.sh` does it in the right order.
 2. **Never set duty 0 as a "quiet" experiment.** `duty_pct` is clamped to `min(100)` and never floored,
    so 0 is a legal, silent, heat-producing configuration.
 3. **Curve beats Manual for anything longer than a test.** Manual is a constant; Curve re-evaluates every
@@ -72,11 +72,14 @@ curl -s http://127.0.0.1:<port>/api/config
 
 Port discovery matters: `FRAMEWORK_CONTROL_PORT` is required at **compile** time (`option_env!`), so the
 port is baked into the binary (30912 for AUR builds, 8090 in dev) and cannot be changed by editing the
-unit. `scripts/fc-status.sh` finds it by probing loopback listeners for `/api/health`.
+unit. `bash scripts/fc-status.sh` finds it by probing loopback listeners for `/api/health`.
+
+Hub installs drop the executable bit — invoke the helpers as `bash scripts/fc-*.sh` (a git clone keeps
+`+x`, so `./scripts/...` works there).
 
 ## Procedure — apply a fan curve (daemon path)
 
-1. Confirm the daemon answers: `scripts/fc-status.sh` (also prints current mode and RPM).
+1. Confirm the daemon answers: `bash scripts/fc-status.sh` (also prints current mode and RPM).
 2. Choose a curve. Anchors are implicit: the curve always gets `[0,0]` and `[100,100]` wrapped around your
    points, and interpolation is linear. A sane laptop curve:
 
@@ -90,10 +93,11 @@ unit. `scripts/fc-status.sh` finds it by probing loopback listeners for `/api/he
 
    Keep a floor point (the 35 °C row) — the implicit `[0,0]` anchor means anything below your first point
    ramps duty down toward zero.
-3. Apply it — `scripts/fc-curve.sh` merges a named profile into the existing profile list and activates it:
+3. Apply it — `bash scripts/fc-curve.sh` merges a named profile into the existing profile list and
+   activates it:
 
    ```bash
-   scripts/fc-curve.sh --id quiet --name Quiet \
+   bash scripts/fc-curve.sh --id quiet --name Quiet \
      --points "35:20,50:30,65:55,80:85,90:100" \
      --hysteresis 3 --up 5 --down 3 --poll 500
    ```
@@ -139,7 +143,7 @@ remaining risks (unauthenticated loopback API, unsigned self-update, absent sand
 
 ## Verification checklist
 
-- `scripts/fc-status.sh` exits 0 and prints mode + RPM.
+- `bash scripts/fc-status.sh` exits 0 and prints mode + RPM.
 - After a mode change, `GET /api/config` returns the new `fan.active_profile` **and** the profile body you
   intended (profiles are replaced wholesale by the API, not merged field-by-field).
 - RPM moved in the expected direction within ~5 s of a duty change; temps stable or falling.
